@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="theme-color" content="#0a0a0a" />
+  <title>Motor Timer</title>
+  <link rel="manifest" href="manifest.json" />
+
+  <style>
+    /* ─── TOKENS ─────────────────────────────────────────────── */
+    :root {
+      --bg:           #0a0a0a;
+      --surface:      #141414;
+      --border:       #2a2a2a;
+      --text-primary: #f0f0f0;
+      --text-muted:   #666;
+      --accent:       #00d97e;       /* vivid teal-green */
+      --accent-dim:   #004d2c;
+      --danger:       #ff2d2d;
+      --danger-dim:   #3a0000;
+      --ring-size:    min(70vw, 320px);
+      --ring-stroke:  10;
+      --font-mono:    'Courier New', Courier, monospace;
+      --font-sans:    -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+
+    /* ─── RESET ──────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      overscroll-behavior: none;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100dvh;
+      padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+      padding-top: max(env(safe-area-inset-top), 16px);
+      padding-bottom: max(env(safe-area-inset-bottom), 24px);
+      transition: background 0.15s;
+      overflow: hidden;
+    }
+
+    /* ─── TOP LABEL ──────────────────────────────────────────── */
+    .app-label {
+      font-size: 11px;
+      letter-spacing: 0.25em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+    }
+
+    /* ─── RING CONTAINER ─────────────────────────────────────── */
+    .ring-wrap {
+      position: relative;
+      width: var(--ring-size);
+      height: var(--ring-size);
+      flex-shrink: 0;
+    }
+
+    .ring-wrap svg {
+      width: 100%;
+      height: 100%;
+      transform: rotate(-90deg);
+    }
+
+    /* track */
+    .ring-track {
+      fill: none;
+      stroke: var(--border);
+      stroke-width: var(--ring-stroke);
+    }
+
+    /* progress arc */
+    .ring-progress {
+      fill: none;
+      stroke: var(--accent);
+      stroke-width: var(--ring-stroke);
+      stroke-linecap: round;
+      transition: stroke-dashoffset 1s linear, stroke 0.4s;
+    }
+
+    /* center content */
+    .ring-center {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+    }
+
+    .time-display {
+      font-family: var(--font-mono);
+      font-size: clamp(52px, 16vw, 80px);
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      color: var(--text-primary);
+      line-height: 1;
+      transition: color 0.3s;
+    }
+
+    .time-label {
+      font-size: 12px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    /* ─── STATUS TEXT ─────────────────────────────────────────── */
+    .status-block {
+      margin-top: 28px;
+      text-align: center;
+      padding: 0 24px;
+    }
+
+    .status-main {
+      font-size: clamp(13px, 3.5vw, 16px);
+      color: var(--text-muted);
+      line-height: 1.5;
+      max-width: 280px;
+      margin: 0 auto;
+    }
+
+    /* ─── BUTTONS ─────────────────────────────────────────────── */
+    .btn-group {
+      margin-top: 36px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      width: min(320px, 88vw);
+    }
+
+    .btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      width: 100%;
+      padding: 18px 24px;
+      border-radius: 16px;
+      border: none;
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: transform 0.1s, opacity 0.2s, background 0.3s;
+      -webkit-tap-highlight-color: transparent;
+      min-height: 58px;
+      outline: none;
+    }
+
+    .btn:focus-visible {
+      outline: 3px solid var(--accent);
+      outline-offset: 3px;
+    }
+
+    .btn:active { transform: scale(0.97); }
+
+    .btn-restart {
+      background: var(--surface);
+      color: var(--accent);
+      border: 1.5px solid var(--border);
+    }
+
+    .btn-stop {
+      background: var(--danger);
+      color: #fff;
+      font-size: 17px;
+    }
+
+    .btn-restart-alarm {
+      background: var(--surface);
+      color: var(--text-primary);
+      border: 1.5px solid var(--border);
+    }
+
+    /* ─── AUDIO TAP BANNER ────────────────────────────────────── */
+    #audio-banner {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: #1a1200;
+      border-top: 1px solid #ffaa00;
+      color: #ffcc44;
+      font-size: 14px;
+      font-weight: 600;
+      text-align: center;
+      padding: 14px 20px;
+      padding-bottom: max(14px, env(safe-area-inset-bottom));
+      display: none;
+      z-index: 100;
+      cursor: pointer;
+    }
+
+    #audio-banner.visible { display: block; }
+
+    /* ─── ALARM OVERLAY ───────────────────────────────────────── */
+    #alarm-state {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 32px 24px;
+      padding-top: max(32px, env(safe-area-inset-top));
+      padding-bottom: max(32px, env(safe-area-inset-bottom));
+    }
+
+    #alarm-state.active { display: flex; }
+    #run-state.hidden   { display: none; }
+
+    .alarm-icon {
+      font-size: 64px;
+      animation: pulse-icon 0.8s ease-in-out infinite alternate;
+      margin-bottom: 20px;
+    }
+
+    @keyframes pulse-icon {
+      from { transform: scale(1); }
+      to   { transform: scale(1.15); }
+    }
+
+    .alarm-headline {
+      font-size: clamp(36px, 11vw, 56px);
+      font-weight: 900;
+      letter-spacing: 0.05em;
+      color: #fff;
+      line-height: 1.1;
+      margin-bottom: 12px;
+    }
+
+    .alarm-sub {
+      font-size: clamp(18px, 5.5vw, 26px);
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      color: #fff;
+      text-shadow: 0 0 20px rgba(255,255,255,0.4);
+      margin-bottom: 40px;
+      line-height: 1.3;
+    }
+
+    .alarm-btn-group {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      width: min(320px, 88vw);
+    }
+
+    /* ─── FLASH ANIMATION ─────────────────────────────────────── */
+    @keyframes flash-bg {
+      0%, 49% { background: var(--danger); }
+      50%, 100%{ background: #000; }
+    }
+
+    body.flashing { animation: flash-bg 0.9s step-start infinite; }
+
+    /* ─── REDUCED MOTION ──────────────────────────────────────── */
+    @media (prefers-reduced-motion: reduce) {
+      .ring-progress { transition: none; }
+      body.flashing  { animation: none; background: var(--danger); }
+      .alarm-icon    { animation: none; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ── RUNNING STATE ─────────────────────────────────────── -->
+  <div id="run-state" role="main" aria-label="Motor timer running">
+
+    <p class="app-label" aria-hidden="true">Water Motor Timer</p>
+
+    <!-- Circular progress ring -->
+    <div class="ring-wrap" role="timer" aria-live="off" aria-label="Countdown timer">
+      <svg viewBox="0 0 100 100" aria-hidden="true">
+        <circle class="ring-track"    cx="50" cy="50" r="44" />
+        <circle class="ring-progress" cx="50" cy="50" r="44"
+                id="ring-arc"
+                stroke-dasharray="276.46"
+                stroke-dashoffset="0" />
+      </svg>
+      <div class="ring-center">
+        <div class="time-display" id="time-display" aria-atomic="true">10:00</div>
+        <div class="time-label" id="time-label">remaining</div>
+      </div>
+    </div>
+
+    <div class="status-block">
+      <p class="status-main" id="status-text">
+        Remember to turn OFF the motor switch when the timer finishes.
+      </p>
+    </div>
+
+    <div class="btn-group">
+      <button class="btn btn-restart" id="btn-restart"
+              aria-label="Restart 10-minute timer" onclick="restartTimer()">
+        ↺ &nbsp;Restart Timer
+      </button>
+    </div>
+
+  </div>
+
+  <!-- ── ALARM STATE ────────────────────────────────────────── -->
+  <div id="alarm-state" role="alert" aria-live="assertive" aria-label="Timer finished alarm">
+    <div class="alarm-icon" aria-hidden="true">⚠️</div>
+    <div class="alarm-headline">TIME'S UP</div>
+    <div class="alarm-sub">TURN OFF<br>THE MOTOR SWITCH</div>
+    <div class="alarm-btn-group">
+      <button class="btn btn-stop" id="btn-stop"
+              aria-label="Stop alarm" onclick="stopAlarm()">
+        ⏹ &nbsp;STOP ALARM
+      </button>
+      <button class="btn btn-restart-alarm" id="btn-restart-alarm"
+              aria-label="Restart 10-minute timer" onclick="restartTimer()">
+        ↺ &nbsp;Restart 10 Minutes
+      </button>
+    </div>
+  </div>
+
+  <!-- ── AUDIO UNLOCK BANNER ───────────────────────────────── -->
+  <div id="audio-banner" role="status" onclick="unlockAudio()" tabindex="0"
+       aria-label="Tap to enable alarm sound">
+    🔔 &nbsp;Tap anywhere to enable alarm sound
+  </div>
+
+<script>
+/* ─────────────────────────────────────────────────────────────
+   WATER MOTOR TIMER — vanilla JS
+   ───────────────────────────────────────────────────────────── */
+
+const DURATION   = 10 * 60;          // 600 seconds
+const CIRCUMF    = 276.46;           // 2π × 44 (ring radius)
+
+// DOM refs
+const elRunState    = document.getElementById('run-state');
+const elAlarmState  = document.getElementById('alarm-state');
+const elTimeDisplay = document.getElementById('time-display');
+const elTimeLabel   = document.getElementById('time-label');
+const elStatusText  = document.getElementById('status-text');
+const elRingArc     = document.getElementById('ring-arc');
+const elAudioBanner = document.getElementById('audio-banner');
+
+// State
+let endTimestamp  = null;
+let tickInterval  = null;
+let alarmActive   = false;
+let audioCtx      = null;
+let alarmScheduler= null;
+let vibrInterval  = null;
+let wakeLock      = null;
+let audioUnlocked = false;
+
+/* ─── INIT ─────────────────────────────────────────────────── */
+function init() {
+  initAudio();
+  startTimer();
+  requestWakeLock();
+  document.addEventListener('visibilitychange', onVisibility);
+  document.addEventListener('click', handleGlobalClick, { once: true, passive: true });
+}
+
+/* ─── TIMER ────────────────────────────────────────────────── */
+function startTimer() {
+  clearInterval(tickInterval);
+  endTimestamp = Date.now() + DURATION * 1000;
+  showRunState();
+  tick();
+  tickInterval = setInterval(tick, 500); // poll twice per second for accuracy
+}
+
+function tick() {
+  const remaining = Math.max(0, Math.ceil((endTimestamp - Date.now()) / 1000));
+  renderTime(remaining);
+
+  if (remaining <= 0) {
+    clearInterval(tickInterval);
+    triggerAlarm();
+  }
+}
+
+function renderTime(secs) {
+  const m = String(Math.floor(secs / 60)).padStart(2, '0');
+  const s = String(secs % 60).padStart(2, '0');
+  elTimeDisplay.textContent = `${m}:${s}`;
+
+  // Ring: offset from full (0) to empty (CIRCUMF)
+  const pct    = secs / DURATION;
+  const offset = CIRCUMF * (1 - pct);
+  elRingArc.style.strokeDashoffset = offset;
+
+  // Colour shift as timer runs low
+  if (secs <= 60) {
+    elRingArc.style.stroke = '#ff8800';
+  } else {
+    elRingArc.style.stroke = 'var(--accent)';
+  }
+}
+
+/* ─── ALARM ────────────────────────────────────────────────── */
+function triggerAlarm() {
+  alarmActive = true;
+
+  // UI
+  showAlarmState();
+  document.body.classList.add('flashing');
+
+  // Audio
+  startBeepLoop();
+
+  // Vibration
+  startVibration();
+}
+
+function stopAlarm() {
+  alarmActive = false;
+
+  // Stop beep loop
+  clearTimeout(alarmScheduler);
+  if (audioCtx) {
+    try { audioCtx.close(); } catch(e) {}
+    audioCtx = null;
+    audioUnlocked = false;
+  }
+
+  // Stop vibration
+  clearInterval(vibrInterval);
+  if (navigator.vibrate) navigator.vibrate(0);
+
+  // Stop flash
+  document.body.classList.remove('flashing');
+}
+
+function restartTimer() {
+  stopAlarm();
+  initAudio();           // fresh AudioContext
+  startTimer();
+}
+
+/* ─── AUDIO ────────────────────────────────────────────────── */
+function initAudio() {
+  try {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    // Probe autoplay policy
+    if (audioCtx.state === 'suspended') {
+      showAudioBanner();
+    } else {
+      audioUnlocked = true;
+    }
+  } catch(e) {
+    console.warn('Web Audio not supported:', e);
+  }
+}
+
+function unlockAudio() {
+  if (!audioCtx) return;
+  audioCtx.resume().then(() => {
+    audioUnlocked = true;
+    hideAudioBanner();
+    // If alarm is already running, start beeping now
+    if (alarmActive) startBeepLoop();
+  });
+}
+
+function handleGlobalClick() {
+  if (!audioUnlocked) unlockAudio();
+}
+
+/** Play a single short beep at a given frequency, returns duration in ms */
+function playBeep(freq, durationMs, when) {
+  if (!audioCtx || !audioUnlocked) return;
+
+  const osc  = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+
+  osc.type      = 'square';
+  osc.frequency.setValueAtTime(freq, when);
+
+  // Hard envelope: full volume then quick fade to avoid click
+  gain.gain.setValueAtTime(0.0001, when);
+  gain.gain.exponentialRampToValueAtTime(0.9, when + 0.01);
+  gain.gain.setValueAtTime(0.9, when + durationMs / 1000 - 0.05);
+  gain.gain.exponentialRampToValueAtTime(0.0001, when + durationMs / 1000);
+
+  osc.start(when);
+  osc.stop(when + durationMs / 1000);
+}
+
+/**
+ * Emergency pattern: BEEP-BEEP … pause … BEEP-BEEP … repeat
+ * Two high-pitched beeps, 200 ms each, 120 ms apart
+ * Then 700 ms silence, then repeat
+ */
+function scheduleBeepCycle() {
+  if (!alarmActive || !audioCtx || !audioUnlocked) {
+    alarmScheduler = setTimeout(scheduleBeepCycle, 300);
+    return;
+  }
+
+  const now = audioCtx.currentTime;
+  // beep 1
+  playBeep(1047, 200, now);
+  // beep 2
+  playBeep(1047, 200, now + 0.32);
+  // beep 3 (accent)
+  playBeep(1318, 200, now + 0.64);
+
+  // Schedule next cycle in 1.4 s
+  alarmScheduler = setTimeout(scheduleBeepCycle, 1400);
+}
+
+function startBeepLoop() {
+  clearTimeout(alarmScheduler);
+  scheduleBeepCycle();
+}
+
+/* ─── VIBRATION ────────────────────────────────────────────── */
+function startVibration() {
+  if (!navigator.vibrate) return;
+  const pattern = [500, 300, 500, 300];
+
+  const doVibrate = () => { if (alarmActive) navigator.vibrate(pattern); };
+  doVibrate();
+  vibrInterval = setInterval(doVibrate, 1600);
+}
+
+/* ─── WAKE LOCK ────────────────────────────────────────────── */
+async function requestWakeLock() {
+  if (!('wakeLock' in navigator)) return;
+  try {
+    wakeLock = await navigator.wakeLock.request('screen');
+  } catch(e) { /* silently ignore */ }
+}
+
+function onVisibility() {
+  if (document.visibilityState === 'visible') {
+    requestWakeLock();
+    // Correct any drift after tab was hidden
+    if (endTimestamp && !alarmActive) {
+      tick();
+    }
+  }
+}
+
+/* ─── UI HELPERS ────────────────────────────────────────────── */
+function showRunState() {
+  elRunState.classList.remove('hidden');
+  elAlarmState.classList.remove('active');
+  renderTime(DURATION);
+  elTimeLabel.textContent = 'remaining';
+  elStatusText.textContent = 'Remember to turn OFF the motor switch when the timer finishes.';
+  document.body.style.background = '';
+}
+
+function showAlarmState() {
+  elRunState.classList.add('hidden');
+  elAlarmState.classList.add('active');
+}
+
+function showAudioBanner() {
+  elAudioBanner.classList.add('visible');
+}
+
+function hideAudioBanner() {
+  elAudioBanner.classList.remove('visible');
+}
+
+/* ─── KEYBOARD ACCESSIBILITY ─────────────────────────────────── */
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' || e.key === ' ') {
+    if (!audioUnlocked) unlockAudio();
+  }
+});
+
+/* ─── START ─────────────────────────────────────────────────── */
+window.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
